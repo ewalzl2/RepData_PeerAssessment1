@@ -1,0 +1,166 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+author: "Emily Walzl"
+date: "2023-06-30"
+output: html_document:
+        keep_md: true
+        
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Loading and preprocessing the data ####
+First things first, we load in the data and because it is already labled we include "header = TRUE" so the first row is made the varible names not as the first row of data.
+```{R, echo = TRUE}
+# Loading in the dataset from the file location
+df <- read.csv("/Users/emilywalzl/Downloads/activity.csv", header = T)
+```
+
+Next we want to reformat the data so it can be more easily used for our analyses.
+In this case I want to reformat things so that each day is a single row; transfroming it from long to wide format. Now we have each day on a single row and the number of steps at each time interval during that day.
+```{R, echo = T}
+# Reformat from long to wide 
+reformat_df <- reshape(df, idvar = "date", timevar = "interval", direction = "wide")
+
+install.packages("lubridate")
+library(lubridate)
+#Converting date variable from character to date
+reformat_df$date <- ymd(reformat_df$date)
+```
+
+
+#### What is mean total number of steps taken per day? ####
+Now that we have our data formated, we will average across the columns for each day.
+```{R, echo = T}
+library(ggplot2)
+# Calculate the total steps
+reformat_df$total_steps <- rowSums(reformat_df[,2:289], na.rm = T)
+
+# Histogram of the total number of steps per day
+# Cant use histogram per se because R will only take the x variable for histograms 
+ggplot(reformat_df, aes(x = date, y = total_steps))+
+  geom_bar(stat = 'identity')
+
+# Average Steps per day
+mean(reformat_df$total_steps, na.rm = T) #mean
+median(reformat_df$total_steps, na.rm = T) #median
+
+# Plotting the average number of steps per day
+x_dat_min <- seq(0,55,by=5) # X-variable minutes 0-55
+x_dat_hr <- seq(0,2300,by=100) # X-variable hours 0-24
+
+# Creating blank variables to input in
+x_dat <- NULL # x-axis 
+y_dat <- NULL # y-axis
+
+# Getting all the x-axis time points 0000, 0005, 0010, ..., 2345, 2350, 2355
+for (i in x_dat_min){
+  x_dat <- c(x_dat, x_dat_hr+i) # Add all 5 minute intervals to all the hour intervals
+}
+x_dat <- x_dat[order(x_dat)] # ordering the x-data from 0000 - 2355
+
+# Average steps per 5-minute-interval
+for(i in 2:289){
+ y_dat[i-1] <-mean(reformat_df[,i], na.rm = TRUE)
+}
+df <- as.data.frame(cbind(x_dat, y_dat)) # Combining the data into a single dataframe with the x and y data
+
+# Plotting the average steps per 5-minute-interval
+ggplot(df, aes(x_dat,y_dat))+
+  geom_line() + 
+  xlab("")
+
+df[df$y_dat >= 206,] # Most steps on average taken at what point - gives the 5-minute interval and the number of steps
+```
+
+#### Imputing missing values ####
+
+I've chose to fill in missing values with the average number of steps taken during that given time interval.
+```{r, echo = T}
+sum(is.na(reformat_df$total_steps)) # checking how many rows have missing values
+
+# Code to replace any missing values found with the aveage number of steps taken during that interval
+for(i in 1:289){
+  reformat_df[is.na(reformat_df[,i]), i] <- mean(reformat_df[,i], na.rm = TRUE)
+}
+sum(is.na(reformat_df$total_steps)) # checking how many rows have missing values - should be 0 now
+
+# Plotting the total steps taken each day
+ggplot(reformat_df, aes(x = date, y = total_steps))+
+  geom_bar(stat = 'identity')
+
+# Average Steps per day
+mean(reformat_df$total_steps, na.rm = T) #mean
+median(reformat_df$total_steps, na.rm = T) #median
+
+```
+
+
+
+#### Are there differences in activity patterns between weekdays and weekends? ####
+
+Make a panel plot containing a time series plot (i.e. 
+type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.
+```{r, echo = T}
+# Installing a package that allows me to arrange the weekday/weekday plots together
+install.packages("gridExtra")
+library(gridExtra)
+
+# Creating a variable that allows me to parase the weekday and weekend days
+reformat_df$weekdays <- weekdays(reformat_df$date) # Changes the date variable from MMDDYYYY to Corresponding day of the week (ie monday, tuesday, wednesday, etc)
+reformat_df$isweekend <- ifelse(reformat_df$weekdays == "Saturday" | reformat_df$weekdays == "Sunday", "Weekend", "Weekday" ) # creating a varaible that identifies weekdays (Monday, Tuesday, Wednesday, Thursday, Friday) and weekends (Saturday and Sunday)
+
+weekday_df <- reformat_df[which(reformat_df$isweekend == "Weekday"),] # Dataset that is only the weekday info
+weekend_df <- reformat_df[which(reformat_df$isweekend == "Weekend"),] # Dataset that is only the weekend info
+
+x_dat_min <- seq(0,55,by=5) # X-variable minutes 0-55
+x_dat_hr <- seq(0,2300,by=100) # X-variable hours 0-24
+# Creating blank variables to input in
+x_dat <- NULL # x-axis
+weekday_y_dat <- NULL # weekday y-axis 
+weekend_y_dat <- NULL # weekend y-axis
+
+# Getting all the x-axis time points 0000, 0005, 0010, ..., 2345, 2350, 2355
+for (i in x_dat_min){
+  x_dat <- c(x_dat, x_dat_hr+i) # Add all 5 minute intervals to all the hour intervals
+}
+x_dat <- x_dat[order(x_dat)] # ordering the x-data from 0000 - 2355
+
+# Getting the 5-minute-interval mean values for the Weekday data
+for(i in 2:289){
+ weekday_y_dat[i-1] <-mean(weekday_df[,i], na.rm = TRUE)
+}
+# Getting the 5-minute-interval mean values for the Weekend data
+for(i in 2:289){
+ weekend_y_dat[i-1] <-mean(weekend_df[,i], na.rm = TRUE)
+}
+
+# Weekday plot
+p1 <- ggplot(aes(x_dat,weekday_y_dat))+
+  geom_line() + 
+  xlab("")
+# Weekend plot
+p2 <- ggplot(aes(x_dat,weekend_y_dat))+
+  geom_line() + 
+  xlab("")
+
+# Arranging Weekday plot over Weekend plot
+grid.arrange(p1, p2, nrow = 2)
+```
+
+We see that the max average numnber of steps taken during the weekdays is at:
+8:35am with 230.38 steps on avaerage taken at this time interval
+
+We see that the max average numnber of steps taken during the weekends is at:
+9:15am with 166.64 steps on avaerage taken at this time interval
+
+So we see that the max number of steps taken during the weekdays is more than the max average steps taken during the weekend. We also see that the max average steps taken during the weekdays is earlier than the max number of steps taken during the weekends.
+```{R, echo= T}
+wkdy_df <- as.data.frame(cbind(x_dat, weekday_y_dat)) # Combining the data into a single dataframe with the x and y data
+wknd_df <- as.data.frame(cbind(x_dat, weekend_y_dat)) # Combining the data into a single dataframe with the x and y data
+wkdy_df[wkdy_df$weekday_y_dat >= 206,] # Most steps on average taken at what point - gives the 5-minute interval and the number of steps
+wknd_df[wknd_df$weekend_y_dat >= 150,] # Most steps on average taken at what point - gives the 5-minute interval and the number of steps
+
+```
